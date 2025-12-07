@@ -1,0 +1,282 @@
+FORMAT: 1A
+HOST: http://localhost:3000
+
+# MHIN API
+
+REST API exposing My Hash Is Nice database over HTTP
+
+## Group Health
+
+### Root [/]
+Health check that verifies SQLite connectivity and rollblock connectivity.
+
+#### GET
++ Response 200 (application/json)
+    + Attributes
+        + status: ok (string)
+    + Body
+
+            {
+              "status": "ok"
+            }
+
++ Response 500 (application/json)
+    + Body
+
+            { "error": "SQLite or rollblock pool unavailable." }
+
+## Group Blocks
+
+### Latest Cumulative Stats [/blocks]
+Returns the latest `cumul_stats` row from the `stats` table.
+
+#### GET
++ Response 200 (application/json)
+    + Body
+
+            {
+              "block_count": 926845,
+              "block_index": 926844,
+              "max_zero_count": 12,
+              "new_utxo_count": 819805896,
+              "nicest_txid": "000000000000c469d884453cf29b9bc4995e93980fb7fa86d3b8abe66394e843",
+              "reward_count": 456685,
+              "total_reward": 10279532950024414,
+              "utxo_spent_count": 783088906
+            }
+
++ Response 404 (application/json)
+    + Body
+
+            { "error": "No rows available in the stats table yet." }
+
++ Response 500 (application/json)
+    + Body
+
+            { "error": "Invalid JSON in the database or SQLite failure." }
+
+### Block Details [/blocks/{block_height}]
+Returns per-block stats and reward entries for the given height.
+
++ Parameters
+    + block_height: 674611 (number) - Bitcoin block height.
+
+#### GET
++ Response 200 (application/json)
+    + Body
+
+            {
+              "block_index": 674611,
+              "block_stats": {
+                "block_index": 674611,
+                "max_zero_count": 9,
+                "new_utxo_count": 1744,
+                "nicest_txid": "000000000fdf0c619cd8e0d512c7e2c0da5a5808e60f12f1e0d01522d2986a51",
+                "reward_count": 1,
+                "total_reward": 409600000000,
+                "utxo_spent_count": 1660
+              },
+              "cumul_stats": {
+                "block_count": 674612,
+                "block_index": 674611,
+                "max_zero_count": 9,
+                "new_utxo_count": 293995639,
+                "nicest_txid": "000000000fdf0c619cd8e0d512c7e2c0da5a5808e60f12f1e0d01522d2986a51",
+                "reward_count": 52,
+                "total_reward": 20070400000000,
+                "utxo_spent_count": 281967405
+              },
+              "rewards": [
+                {
+                  "reward": 409600000000,
+                  "txid": "000000000fdf0c619cd8e0d512c7e2c0da5a5808e60f12f1e0d01522d2986a51",
+                  "vout": 1,
+                  "zero_count": 9
+                }
+              ]
+            }
+
++ Response 404 (application/json)
+    + Body
+
+            { "error": "Block not found in the stats table." }
+
++ Response 400 (application/json)
+    + Body
+
+            { "error": "`block_height` exceeds 64-bit signed range." }
+
++ Response 500 (application/json)
+    + Body
+
+            { "error": "Invalid JSON in the database or SQLite failure." }
+
+## Group Rewards
+
+### Rewards List [/rewards{?offset,limit}]
+Paginated list of rewards ordered by `block_index DESC`, then `reward DESC`, `zero_count DESC`, `txid ASC`, `vout ASC`.
+
++ Parameters
+    + offset: 0 (number, optional) - Row offset. Default: 0.
+    + limit: 50 (number, optional) - Page size. Default: 50. Maximum: 500. Values above 500 are clamped to 500.
+
+#### GET
++ Request
+    + Parameters
+        + limit: 5 (number, optional)
++ Response 200 (application/json)
+    + Body
+
+            [
+              {
+                "block_index": 925622,
+                "reward": 409600000000,
+                "txid": "000000230a733b1deb2ca7dbc86f315682f7dff4ca64731ed0afe7ac244f2283",
+                "vout": 0,
+                "zero_count": 6
+              },
+              {
+                "block_index": 925362,
+                "reward": 409600000000,
+                "txid": "0000000bb463dde7fd2c72d673c9a393d8962f0b0414ae32bf0aec23e5522a4e",
+                "vout": 0,
+                "zero_count": 7
+              },
+              {
+                "block_index": 925181,
+                "reward": 409600000000,
+                "txid": "00000000f20055df2ea02de851a47e97256ec06f0d196c6d62248648b6c981f2",
+                "vout": 0,
+                "zero_count": 8
+              },
+              {
+                "block_index": 925127,
+                "reward": 409600000000,
+                "txid": "00000008317bf740f5c1dbd991ad3ab918948ca7b9329b74ec9d76e212b6dc23",
+                "vout": 0,
+                "zero_count": 7
+              },
+              {
+                "block_index": 925112,
+                "reward": 409600000000,
+                "txid": "0000000089c1d40e77a9a601adfb263490ad717bc418ebed7f895d9eb41cdd84",
+                "vout": 0,
+                "zero_count": 8
+              }
+            ]
+
++ Response 500 (application/json)
+    + Body
+
+            { "error": "SQLite failure." }
+
++ Response 400 (application/json)
+    + Body
+
+            { "error": "`offset` exceeds 64-bit signed range." }
+
+## Group Address UTXOs
+
+### Address UTXOs [/addresses/{address}/utxos]
+Fetch confirmed UTXOs from the Electrum-compatible API, then return their rollblock balances.
+
++ Parameters
+    + address: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa (string) - Bitcoin address.
+
+#### GET
++ Response 200 (application/json)
+    + Returns an empty array when the address has no confirmed UTXOs.
+    + Body
+
+            [
+              {
+                "balance": 224870400000026,
+                "txid": "000000f910372e4b2af47fe08db4107ef410f0ccfb75613cb7e276777332eabc",
+                "vout": 0
+              },
+              {
+                "balance": 3923200157871,
+                "txid": "9fa757be91d8192477059a460f731253ac24764471795eba1651bafa143ba187",
+                "vout": 0
+              }
+            ]
+
++ Response 400 (application/json)
+    + Body
+
+            { "error": "More than 500 confirmed UTXOs for the address." }
+
++ Response 502 (application/json)
+    + Body
+
+            { "error": "Downstream Electrum API failure or invalid response." }
+
++ Response 500 (application/json)
+    + Body
+
+            { "error": "Rollblock failure." }
+
+## Group UTXOs
+
+### Single UTXO [/utxos/{outpoint}]
+Balance for a single outpoint.
+
++ Parameters
+    + outpoint: 000000000fdf0c619cd8e0d512c7e2c0da5a5808e60f12f1e0d01522d2986a51:1 (string) - `<txid>:<vout>`.
+
+#### GET
++ Response 200 (application/json)
+    + Body
+
+            {
+              "balance": 409600000000,
+              "txid": "000000000fdf0c619cd8e0d512c7e2c0da5a5808e60f12f1e0d01522d2986a51",
+              "vout": 1
+            }
+
++ Response 400 (application/json)
+    + Body
+
+            { "error": "Malformed txid or vout." }
+
++ Response 500 (application/json)
+    + Body
+
+            { "error": "Rollblock failure." }
+
+### Batch UTXOs [/utxos]
+Batch query for up to 100 outpoints.
+
+#### POST
++ Request (application/json)
+    + Body
+
+            { "utxos": ["<txid1>:0", "<txid2>:1"] }
+
++ Response 200 (application/json)
+    + Accepts an empty list and returns an empty array.
+    + Body
+
+            [
+              {
+                "balance": 409600000000,
+                "txid": "000000000fdf0c619cd8e0d512c7e2c0da5a5808e60f12f1e0d01522d2986a51",
+                "vout": 1
+              },
+              {
+                "balance": 409600000000,
+                "txid": "000000230a733b1deb2ca7dbc86f315682f7dff4ca64731ed0afe7ac244f2283",
+                "vout": 0
+              }
+            ]
+
++ Response 400 (application/json)
+    + Body
+
+            { "error": "More than 100 outpoints or malformed entries." }
+
++ Response 500 (application/json)
+    + Body
+
+            { "error": "Rollblock failure." }
+
