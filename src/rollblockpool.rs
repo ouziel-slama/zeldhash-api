@@ -14,6 +14,7 @@ use std::sync::{
 use rollblock::client::{ClientConfig, RemoteStoreClient};
 #[cfg(not(test))]
 use rollblock::net::BasicAuthConfig;
+pub use rollblock::StoreKey;
 
 #[derive(Clone)]
 pub struct RollblockClientSettings {
@@ -112,7 +113,7 @@ pub async fn ensure_rollblock_available(pool: &RollblockPool) -> Result<(), Stri
 #[derive(Debug, Clone, Default)]
 pub struct MockRemoteStoreClient {
     closed: Arc<AtomicBool>,
-    calls: Arc<Mutex<Vec<Vec<[u8; 8]>>>>,
+    calls: Arc<Mutex<Vec<Vec<StoreKey>>>>,
     responses: Arc<Mutex<Vec<Vec<Vec<u8>>>>>,
 }
 
@@ -126,7 +127,7 @@ impl MockRemoteStoreClient {
         self.closed.load(Ordering::SeqCst)
     }
 
-    pub fn calls(&self) -> Vec<Vec<[u8; 8]>> {
+    pub fn calls(&self) -> Vec<Vec<StoreKey>> {
         self.calls.lock().unwrap().clone()
     }
 
@@ -134,7 +135,7 @@ impl MockRemoteStoreClient {
         self.responses.lock().unwrap().push(values);
     }
 
-    pub fn get(&mut self, keys: &[[u8; 8]]) -> Result<Vec<Vec<u8>>, String> {
+    pub fn get(&mut self, keys: &[StoreKey]) -> Result<Vec<Vec<u8>>, String> {
         self.calls.lock().unwrap().push(keys.to_vec());
         let mut responses = self.responses.lock().unwrap();
         if responses.is_empty() {
@@ -178,7 +179,10 @@ mod tests {
     #[test]
     fn mock_client_records_get_calls() {
         let mut mock = MockRemoteStoreClient::new();
-        let keys = vec![[1u8; 8], [2u8; 8]];
+        let keys = vec![
+            StoreKey::from_prefix([1u8; 8]),
+            StoreKey::from_prefix([2u8; 8]),
+        ];
 
         let values = mock.get(&keys).expect("mock get");
 

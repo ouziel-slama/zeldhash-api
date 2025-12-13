@@ -1,6 +1,6 @@
 [package]
 name = "zeldhash-api"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "REST API exposing ZeldHash database over HTTP"
 authors = ["Ouziel Slama"]
@@ -17,7 +17,7 @@ axum = { version = "0.8", features = ["json"] }
 clap = { version = "4.5", features = ["derive"] }
 config = "0.15"
 directories = "6.0"
-rollblock = "0.3.4"
+rollblock = {version = "0.4.1", features = ["key-12"]}
 r2d2 = "0.8"
 r2d2_sqlite = "0.31"
 rusqlite = { version = "0.37", features = ["bundled"] }
@@ -25,7 +25,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1", features = ["full"] }
 bitcoin = "0.32"
-xxhash-rust = { version = "0.8", default-features = false, features = ["xxh64"] }
+zeldhash-protocol = "0.3.1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 [dev-dependencies]

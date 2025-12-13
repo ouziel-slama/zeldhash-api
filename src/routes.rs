@@ -15,10 +15,10 @@ use bitcoin::Txid;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::task::spawn_blocking;
-use xxhash_rust::xxh64::xxh64;
+use zeldhash_protocol::helpers::compute_utxo_key;
 
 use crate::{
-    rollblockpool::{ensure_rollblock_available, RollblockPool},
+    rollblockpool::{ensure_rollblock_available, RollblockPool, StoreKey},
     AppState,
 };
 
@@ -470,9 +470,9 @@ async fn fetch_rollblock_balances(
         return Ok(Vec::new());
     }
 
-    let keys: Vec<[u8; 8]> = outpoints
+    let keys: Vec<StoreKey> = outpoints
         .iter()
-        .map(|(txid, vout)| compute_utxo_key(txid, *vout))
+        .map(|(txid, vout)| StoreKey::from_prefix(compute_utxo_key(txid, *vout)))
         .collect();
 
     let mut values = spawn_blocking(move || {
@@ -503,13 +503,6 @@ async fn fetch_rollblock_balances(
         .zip(values.into_iter())
         .map(|((txid, vout), value)| decode_balance(value).map(|balance| (txid, vout, balance)))
         .collect()
-}
-
-fn compute_utxo_key(txid: &Txid, vout: u32) -> [u8; 8] {
-    let mut payload = [0u8; 36];
-    payload[..32].copy_from_slice(txid.as_ref());
-    payload[32..].copy_from_slice(&vout.to_le_bytes());
-    xxh64(&payload, 0).to_le_bytes()
 }
 
 fn decode_balance(value: Vec<u8>) -> ApiResult<u64> {
