@@ -2,13 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.2.1] - 2025-12-13
+## [0.2.0] - 2025-12-13
 ### Changed
 - Upgraded rollblock to 0.4.1 with typed `StoreKey` and `key-12` support.
 - Switched UTXO key hashing to `zeldhash-protocol` helpers, removing the xxhash dependency.
-
-## [0.2.0] - 2025-12-13
-### Changed
 - Project renamed to zeldhash-api (binary, docs, badges, and crate metadata).
 - Env/config prefixes now use `ZELDHASH_API_*` and default config file is `zeldhash-api.toml`.
 - Default data directory now points to `org/zeldhash/zeldhash-parser` and expects `zeldstats.sqlite3`.
