@@ -8,7 +8,7 @@ license = "Apache-2.0 OR MIT"
 repository = "https://github.com/ouziel-slama/zeldhash-api"
 homepage = "https://github.com/ouziel-slama/zeldhash-api"
 readme = "README.md"
-keywords = ["bitcoin", "api", "sqlite", "axum", "rest", "zeldhash"]
+keywords = ["bitcoin", "api", "sqlite", "axum", "rest"]
 categories = ["web-programming::http-server", "database"]
 rust-version = "1.81"
 
