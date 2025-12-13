@@ -1163,27 +1163,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mhinapi"
-version = "0.1.0"
-dependencies = [
- "axum",
- "bitcoin",
- "clap",
- "config",
- "directories",
- "r2d2",
- "r2d2_sqlite",
- "reqwest",
- "rollblock",
- "rusqlite",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "xxhash-rust",
-]
-
-[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2796,6 +2775,27 @@ dependencies = [
  "quote",
  "syn",
  "synstructure",
+]
+
+[[package]]
+name = "zeldhash-api"
+version = "0.2.0"
+dependencies = [
+ "axum",
+ "bitcoin",
+ "clap",
+ "config",
+ "directories",
+ "r2d2",
+ "r2d2_sqlite",
+ "reqwest",
+ "rollblock",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "xxhash-rust",
 ]
 
 [[package]]

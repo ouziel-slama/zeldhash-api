@@ -1,5 +1,5 @@
-//! mhinapi is a REST API exposing My Hash Is Nice database over HTTP. It serves
-//! mhinparser-produced SQLite statistics and queries a rollblock server for
+//! zeldhash-api is a REST API exposing ZeldHash database over HTTP. It serves
+//! zeldhash-parser-produced SQLite statistics and queries a rollblock server for
 //! UTXO balances.
 mod cli;
 mod config;
@@ -61,7 +61,7 @@ fn resolve_data_dir(config: &AppConfig) -> Result<PathBuf, String> {
         .clone()
         .or_else(default_data_dir_path)
         .ok_or_else(|| {
-            "data_dir is required (set --data-dir, MHINAPI_DATA_DIR, or ensure the OS user data directory is available)".to_string()
+            "data_dir is required (set --data-dir, ZELDHASH_API_DATA_DIR, or ensure the OS user data directory is available)".to_string()
         })
 }
 
@@ -84,7 +84,7 @@ async fn bootstrap(
     std::fs::create_dir_all(&data_dir)
         .map_err(|err| format!("Failed to create data directory {data_dir:?}: {err}"))?;
 
-    let sqlite_path = data_dir.join("mhinstats.sqlite3");
+    let sqlite_path = data_dir.join("zeldstats.sqlite3");
     let sqlite_pool = match overrides.sqlite_pool {
         Some(pool) => pool,
         None => build_sqlite_pool(&sqlite_path)
@@ -144,7 +144,7 @@ async fn main() {
                     panic!("failed to bind listener on {server_host}:{server_port}: {err}")
                 });
             println!(
-                "mhinapi listening on http://{}",
+                "zeldhash-api listening on http://{}",
                 listener.local_addr().unwrap()
             );
 
@@ -175,8 +175,8 @@ mod tests {
             data_dir: Some(data_dir),
             rollblock_host: Some("localhost".into()),
             rollblock_port: Some(9443),
-            rollblock_user: Some("mhin".into()),
-            rollblock_password: Some("mhin".into()),
+            rollblock_user: Some("zeld".into()),
+            rollblock_password: Some("zeld".into()),
             electr_url: Some("https://example.test/api".into()),
             server_host: Some("127.0.0.1".into()),
             server_port: Some(0),
@@ -208,7 +208,7 @@ mod tests {
         let tmp = tempdir().expect("temp dir");
         let data_dir = tmp.path().join("data");
         std::fs::create_dir_all(&data_dir).expect("create data dir");
-        let sqlite_path = data_dir.join("mhinstats.sqlite3");
+        let sqlite_path = data_dir.join("zeldstats.sqlite3");
         Connection::open(&sqlite_path).expect("create sqlite db");
 
         let cli = cli_with_data_dir(data_dir);
@@ -232,7 +232,7 @@ mod tests {
         let tmp = tempdir().expect("temp dir");
         let data_dir = tmp.path().join("data");
         std::fs::create_dir_all(&data_dir).expect("create data dir");
-        let sqlite_path = data_dir.join("mhinstats.sqlite3");
+        let sqlite_path = data_dir.join("zeldstats.sqlite3");
         Connection::open(&sqlite_path).expect("create sqlite db");
 
         let cli = cli_with_data_dir(data_dir.clone());

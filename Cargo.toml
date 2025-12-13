@@ -1,14 +1,14 @@
 [package]
-name = "mhinapi"
-version = "0.1.0"
+name = "zeldhash-api"
+version = "0.2.0"
 edition = "2021"
-description = "REST API exposing My Hash Is Nice database over HTTP"
-authors = ["mhin contributors"]
+description = "REST API exposing ZeldHash database over HTTP"
+authors = ["Ouziel Slama"]
 license = "Apache-2.0 OR MIT"
-repository = "https://github.com/ouziel-slama/mhinapi"
-homepage = "https://github.com/ouziel-slama/mhinapi"
+repository = "https://github.com/ouziel-slama/zeldhash-api"
+homepage = "https://github.com/ouziel-slama/zeldhash-api"
 readme = "README.md"
-keywords = ["bitcoin", "api", "sqlite", "axum", "rest"]
+keywords = ["bitcoin", "api", "sqlite", "axum", "rest", "zeldhash"]
 categories = ["web-programming::http-server", "database"]
 rust-version = "1.81"
 

@@ -1,4 +1,4 @@
-//! SQLite connection pool for reading mhinparser statistics.
+//! SQLite connection pool for reading ZeldHash statistics.
 
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;

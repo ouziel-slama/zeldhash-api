@@ -1,4 +1,4 @@
-//! Configuration loading and merging for mhinapi.
+//! Configuration loading and merging for zeldhash-api.
 //!
 //! Settings are resolved in priority order: CLI flags override environment
 //! variables, which override config file values, which override defaults.
@@ -85,27 +85,27 @@ impl AppConfig {
         if let Some(path) = cli.config_file.as_deref() {
             builder = builder.add_source(File::from(path));
         } else {
-            let default_path = Path::new("mhinapi.toml");
+            let default_path = Path::new("zeldhash-api.toml");
             if default_path.exists() {
                 builder = builder.add_source(File::from(default_path));
             }
         }
 
         builder = builder.add_source(
-            Environment::with_prefix("MHINAPI")
+            Environment::with_prefix("ZELDHASH_API")
                 .separator("__")
                 .list_separator(","),
         );
 
         for (env_key, config_key) in [
-            ("MHINAPI_DATA_DIR", "data_dir"),
-            ("MHINAPI_ROLLBLOCK_HOST", "rollblock_host"),
-            ("MHINAPI_ROLLBLOCK_PORT", "rollblock_port"),
-            ("MHINAPI_ROLLBLOCK_USER", "rollblock_user"),
-            ("MHINAPI_ROLLBLOCK_PASSWORD", "rollblock_password"),
-            ("MHINAPI_ELECTR_URL", "electr_url"),
-            ("MHINAPI_SERVER_HOST", "server_host"),
-            ("MHINAPI_SERVER_PORT", "server_port"),
+            ("ZELDHASH_API_DATA_DIR", "data_dir"),
+            ("ZELDHASH_API_ROLLBLOCK_HOST", "rollblock_host"),
+            ("ZELDHASH_API_ROLLBLOCK_PORT", "rollblock_port"),
+            ("ZELDHASH_API_ROLLBLOCK_USER", "rollblock_user"),
+            ("ZELDHASH_API_ROLLBLOCK_PASSWORD", "rollblock_password"),
+            ("ZELDHASH_API_ELECTR_URL", "electr_url"),
+            ("ZELDHASH_API_SERVER_HOST", "server_host"),
+            ("ZELDHASH_API_SERVER_PORT", "server_port"),
         ] {
             if let Ok(value) = env::var(env_key) {
                 builder = builder.set_override(config_key, value)?;
@@ -178,16 +178,16 @@ mod tests {
         unsafe { env::remove_var(key) };
     }
 
-    fn clear_mhinapi_env() {
+    fn clear_zeldhash_api_env() {
         for key in [
-            "MHINAPI_DATA_DIR",
-            "MHINAPI_ROLLBLOCK_HOST",
-            "MHINAPI_ROLLBLOCK_PORT",
-            "MHINAPI_ROLLBLOCK_USER",
-            "MHINAPI_ROLLBLOCK_PASSWORD",
-            "MHINAPI_ELECTR_URL",
-            "MHINAPI_SERVER_HOST",
-            "MHINAPI_SERVER_PORT",
+            "ZELDHASH_API_DATA_DIR",
+            "ZELDHASH_API_ROLLBLOCK_HOST",
+            "ZELDHASH_API_ROLLBLOCK_PORT",
+            "ZELDHASH_API_ROLLBLOCK_USER",
+            "ZELDHASH_API_ROLLBLOCK_PASSWORD",
+            "ZELDHASH_API_ELECTR_URL",
+            "ZELDHASH_API_SERVER_HOST",
+            "ZELDHASH_API_SERVER_PORT",
         ] {
             remove_env(key);
         }
@@ -221,7 +221,7 @@ mod tests {
     fn cli_with_all_overrides() -> Cli {
         Cli {
             config_file: None,
-            data_dir: Some(PathBuf::from("/tmp/mhinapi_cli")),
+            data_dir: Some(PathBuf::from("/tmp/zeldhash-api_cli")),
             rollblock_host: Some("cli-host".into()),
             rollblock_port: Some(4242),
             rollblock_user: Some("cli-user".into()),
@@ -235,12 +235,15 @@ mod tests {
     #[test]
     fn load_prefers_cli_over_env_and_defaults() {
         let _guard = test_lock();
-        clear_mhinapi_env();
-        set_env("MHINAPI_ELECTR_URL", "https://env.example/");
+        clear_zeldhash_api_env();
+        set_env("ZELDHASH_API_ELECTR_URL", "https://env.example/");
 
         let cfg = AppConfig::load(&cli_with_all_overrides()).expect("config should load");
 
-        assert_eq!(cfg.data_dir.as_deref(), Some(Path::new("/tmp/mhinapi_cli")));
+        assert_eq!(
+            cfg.data_dir.as_deref(),
+            Some(Path::new("/tmp/zeldhash-api_cli"))
+        );
         assert_eq!(cfg.rollblock_host, "cli-host");
         assert_eq!(cfg.rollblock_port, 4242);
         assert_eq!(cfg.rollblock_user, "cli-user");
@@ -249,13 +252,13 @@ mod tests {
         assert_eq!(cfg.server_host, "127.0.0.1");
         assert_eq!(cfg.server_port, 9999);
 
-        clear_mhinapi_env();
+        clear_zeldhash_api_env();
     }
 
     #[test]
     fn load_combines_config_file_and_env_when_cli_missing() {
         let _guard = test_lock();
-        clear_mhinapi_env();
+        clear_zeldhash_api_env();
 
         let temp_dir = tempdir().expect("tempdir");
         let config_path = temp_dir.path().join("config.toml");
@@ -272,7 +275,7 @@ server_port = 3030
         )
         .expect("write config");
 
-        set_env("MHINAPI_ROLLBLOCK_PASSWORD", "env-pass");
+        set_env("ZELDHASH_API_ROLLBLOCK_PASSWORD", "env-pass");
 
         let cli = Cli {
             config_file: Some(config_path.clone()),
@@ -297,16 +300,16 @@ server_port = 3030
         assert_eq!(cfg.server_port, 3030);
         assert_eq!(cfg.electr_url, DEFAULT_ELECTR_URL);
 
-        clear_mhinapi_env();
+        clear_zeldhash_api_env();
     }
 
     #[test]
     fn load_reads_default_config_file_when_present() {
         let _guard = test_lock();
-        clear_mhinapi_env();
+        clear_zeldhash_api_env();
 
         let temp_dir = tempdir().expect("tempdir");
-        let default_config_path = temp_dir.path().join("mhinapi.toml");
+        let default_config_path = temp_dir.path().join("zeldhash-api.toml");
         let mut file = File::create(&default_config_path).expect("default config file");
         writeln!(file, r#"electr_url = "https://default.example/api""#)
             .expect("write default config");
@@ -336,6 +339,6 @@ server_port = 3030
         assert_eq!(cfg.server_port, DEFAULT_SERVER_PORT);
         assert_eq!(cfg.electr_url, "https://default.example/api");
 
-        clear_mhinapi_env();
+        clear_zeldhash_api_env();
     }
 }

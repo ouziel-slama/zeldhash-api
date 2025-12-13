@@ -1,4 +1,4 @@
-//! Command-line interface for mhinapi.
+//! Command-line interface for zeldhash-api.
 //!
 //! This module defines the CLI arguments parsed by [`clap`] and used to
 //! configure the server at startup.
@@ -13,9 +13,9 @@ use crate::defaults::{
 
 /// Command-line flags used to bootstrap configuration.
 #[derive(Debug, Parser)]
-#[command(name = "mhinapi", about = "REST API serving mhinparser databases")]
+#[command(name = "zeldhash-api", about = "REST API serving ZeldHash databases")]
 pub struct Cli {
-    /// Optional path to a configuration file (TOML, YAML, or JSON supported by `config` crate, defaults to `mhinapi.toml` when present)
+    /// Optional path to a configuration file (TOML, YAML, or JSON supported by `config` crate, defaults to `zeldhash-api.toml` when present)
     #[arg(long, value_name = "PATH")]
     pub config_file: Option<PathBuf>,
 
@@ -31,11 +31,11 @@ pub struct Cli {
     #[arg(long, value_name = "PORT")]
     pub rollblock_port: Option<u16>,
 
-    /// User for the rollblock database (default: mhin)
+    /// User for the rollblock database (default: zeld)
     #[arg(long, value_name = "USER")]
     pub rollblock_user: Option<String>,
 
-    /// Password for the rollblock database (default: mhin)
+    /// Password for the rollblock database (default: zeld)
     #[arg(long, value_name = "PASSWORD")]
     pub rollblock_password: Option<String>,
 
@@ -124,7 +124,7 @@ impl Cli {
 
     fn runtime_args() -> Vec<OsString> {
         #[cfg(test)]
-        if let Ok(raw) = env::var("MHINAPI_TEST_ARGS") {
+        if let Ok(raw) = env::var("ZELDHASH_API_TEST_ARGS") {
             return raw.split_whitespace().map(OsString::from).collect();
         }
 
@@ -146,17 +146,17 @@ mod tests {
     }
 
     fn clear_test_args() {
-        remove_env("MHINAPI_TEST_ARGS");
+        remove_env("ZELDHASH_API_TEST_ARGS");
     }
 
     #[test]
     fn gather_parses_all_flags_from_env_overrides() {
         let tmp_dir = tempdir().unwrap();
         let args = format!(
-            "mhinapi --data-dir {} --rollblock-host example.com --rollblock-port 1234 --rollblock-user alice --rollblock-password secret --electr-url https://example.com/api --server-host 127.0.0.1 --server-port 4040",
+            "zeldhash-api --data-dir {} --rollblock-host example.com --rollblock-port 1234 --rollblock-user alice --rollblock-password secret --electr-url https://example.com/api --server-host 127.0.0.1 --server-port 4040",
             tmp_dir.path().display()
         );
-        set_env("MHINAPI_TEST_ARGS", &args);
+        set_env("ZELDHASH_API_TEST_ARGS", &args);
 
         let cli = Cli::gather();
 
@@ -174,7 +174,7 @@ mod tests {
 
     #[test]
     fn gather_from_accepts_minimal_arguments() {
-        let cli = Cli::gather_from(["mhinapi"]);
+        let cli = Cli::gather_from(["zeldhash-api"]);
 
         assert!(cli.data_dir.is_none());
         assert!(cli.rollblock_host.is_none());

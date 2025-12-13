@@ -1,4 +1,4 @@
-//! HTTP route handlers for the mhinapi REST API.
+//! HTTP route handlers for the zeldhash-api REST API.
 //!
 //! Provides endpoints for querying block statistics, rewards, and UTXO balances.
 
