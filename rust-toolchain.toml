@@ -1,0 +1,5 @@
+[toolchain]
+# Pin toolchain to match dependencies requiring >=1.83.
+channel = "1.83.0"
+components = ["rustfmt", "clippy"]
+

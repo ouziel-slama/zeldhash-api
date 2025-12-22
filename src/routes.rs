@@ -15,6 +15,7 @@ use bitcoin::Txid;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::task::spawn_blocking;
+use tower_http::cors::CorsLayer;
 use zeldhash_protocol::helpers::compute_utxo_key;
 
 use crate::{
@@ -46,8 +47,8 @@ const MAX_REWARDS_LIMIT: usize = 500;
 const MAX_ADDRESS_UTXOS: usize = 500;
 const ROLLBLOCK_BATCH_SIZE: usize = 100;
 
-pub fn create_router(state: AppState) -> Router {
-    Router::new()
+pub fn create_router(state: AppState, enable_cors: bool) -> Router {
+    let router = Router::new()
         .route("/", get(root))
         .route("/rewards", get(rewards))
         .route("/blocks", get(blocks))
@@ -55,7 +56,13 @@ pub fn create_router(state: AppState) -> Router {
         .route("/addresses/{address}/utxos", get(address_utxos))
         .route("/utxos", post(utxo_balances))
         .route("/utxos/{outpoint}", get(utxo_balance))
-        .with_state(state)
+        .with_state(state);
+
+    if enable_cors {
+        router.layer(CorsLayer::permissive())
+    } else {
+        router
+    }
 }
 
 pub async fn root(State(state): State<AppState>) -> ApiResult<impl IntoResponse> {
@@ -280,7 +287,7 @@ pub async fn rewards(
             )
             .map_err(|err| format!("prepare rewards statement: {err}"))?;
 
-        let rows = stmt
+        let mapped = stmt
             .query_map([limit, offset], |row| {
                 Ok(json!({
                     "block_index": row.get::<_, i64>(0)?,
@@ -290,10 +297,13 @@ pub async fn rewards(
                     "reward": row.get::<_, i64>(4)?,
                 }))
             })
-            .map_err(|err| format!("query rewards map: {err}"))?
+            .map_err(|err| format!("query rewards map: {err}"))?;
+
+        let rows = mapped
             .collect::<Result<Vec<Value>, _>>()
-            .map_err(|err| format!("collect rewards: {err}"));
-        rows
+            .map_err(|err| format!("collect rewards: {err}"))?;
+
+        Ok::<_, String>(rows)
     })
     .await
     .map_err(|err| {

@@ -13,7 +13,7 @@ use std::{
 use crate::{
     cli::Cli,
     defaults::{
-        default_data_dir_path, DEFAULT_ELECTR_URL, DEFAULT_ROLLBLOCK_HOST,
+        default_data_dir_path, DEFAULT_CORS_ENABLED, DEFAULT_ELECTR_URL, DEFAULT_ROLLBLOCK_HOST,
         DEFAULT_ROLLBLOCK_PASSWORD, DEFAULT_ROLLBLOCK_PORT, DEFAULT_ROLLBLOCK_USER,
         DEFAULT_SERVER_HOST, DEFAULT_SERVER_PORT,
     },
@@ -32,6 +32,8 @@ pub struct AppConfig {
     pub rollblock_password: String,
     #[serde(default = "default_electr_url")]
     pub electr_url: String,
+    #[serde(default = "default_cors_enabled")]
+    pub cors_enabled: bool,
     #[serde(default = "default_server_host")]
     pub server_host: String,
     #[serde(default = "default_server_port")]
@@ -58,6 +60,10 @@ fn default_rollblock_password() -> String {
     DEFAULT_ROLLBLOCK_PASSWORD.to_string()
 }
 
+fn default_cors_enabled() -> bool {
+    DEFAULT_CORS_ENABLED
+}
+
 fn default_server_host() -> String {
     DEFAULT_SERVER_HOST.to_string()
 }
@@ -74,6 +80,7 @@ impl AppConfig {
             .set_default("rollblock_port", default_rollblock_port())?
             .set_default("rollblock_user", default_rollblock_user())?
             .set_default("rollblock_password", default_rollblock_password())?
+            .set_default("cors_enabled", default_cors_enabled())?
             .set_default("server_host", default_server_host())?
             .set_default("server_port", default_server_port())?;
 
@@ -104,6 +111,7 @@ impl AppConfig {
             ("ZELDHASH_API_ROLLBLOCK_USER", "rollblock_user"),
             ("ZELDHASH_API_ROLLBLOCK_PASSWORD", "rollblock_password"),
             ("ZELDHASH_API_ELECTR_URL", "electr_url"),
+            ("ZELDHASH_API_CORS_ENABLED", "cors_enabled"),
             ("ZELDHASH_API_SERVER_HOST", "server_host"),
             ("ZELDHASH_API_SERVER_PORT", "server_port"),
         ] {
@@ -129,6 +137,9 @@ impl AppConfig {
         }
         if let Some(value) = cli.electr_url.as_ref() {
             builder = builder.set_override("electr_url", value.clone())?;
+        }
+        if let Some(value) = cli.cors_enabled.as_ref() {
+            builder = builder.set_override("cors_enabled", value.to_string())?;
         }
         if let Some(value) = cli.server_host.as_ref() {
             builder = builder.set_override("server_host", value.clone())?;
@@ -186,6 +197,7 @@ mod tests {
             "ZELDHASH_API_ROLLBLOCK_USER",
             "ZELDHASH_API_ROLLBLOCK_PASSWORD",
             "ZELDHASH_API_ELECTR_URL",
+            "ZELDHASH_API_CORS_ENABLED",
             "ZELDHASH_API_SERVER_HOST",
             "ZELDHASH_API_SERVER_PORT",
         ] {
@@ -227,6 +239,7 @@ mod tests {
             rollblock_user: Some("cli-user".into()),
             rollblock_password: Some("cli-pass".into()),
             electr_url: Some("https://cli.example/".into()),
+            cors_enabled: Some(true),
             server_host: Some("127.0.0.1".into()),
             server_port: Some(9999),
         }
@@ -237,6 +250,7 @@ mod tests {
         let _guard = test_lock();
         clear_zeldhash_api_env();
         set_env("ZELDHASH_API_ELECTR_URL", "https://env.example/");
+        set_env("ZELDHASH_API_CORS_ENABLED", "false");
 
         let cfg = AppConfig::load(&cli_with_all_overrides()).expect("config should load");
 
@@ -249,6 +263,7 @@ mod tests {
         assert_eq!(cfg.rollblock_user, "cli-user");
         assert_eq!(cfg.rollblock_password, "cli-pass");
         assert_eq!(cfg.electr_url, "https://cli.example/");
+        assert!(cfg.cors_enabled);
         assert_eq!(cfg.server_host, "127.0.0.1");
         assert_eq!(cfg.server_port, 9999);
 
@@ -269,6 +284,7 @@ mod tests {
 rollblock_host = "file-host"
 rollblock_port = 2223
 rollblock_user = "file-user"
+cors_enabled = false
 server_host = "file-server"
 server_port = 3030
 "#
@@ -276,6 +292,7 @@ server_port = 3030
         .expect("write config");
 
         set_env("ZELDHASH_API_ROLLBLOCK_PASSWORD", "env-pass");
+        set_env("ZELDHASH_API_CORS_ENABLED", "true");
 
         let cli = Cli {
             config_file: Some(config_path.clone()),
@@ -285,6 +302,7 @@ server_port = 3030
             rollblock_user: None,
             rollblock_password: None,
             electr_url: None,
+            cors_enabled: None,
             server_host: None,
             server_port: None,
         };
@@ -296,6 +314,7 @@ server_port = 3030
         assert_eq!(cfg.rollblock_port, 2223);
         assert_eq!(cfg.rollblock_user, "file-user");
         assert_eq!(cfg.rollblock_password, "env-pass");
+        assert!(cfg.cors_enabled);
         assert_eq!(cfg.server_host, "file-server");
         assert_eq!(cfg.server_port, 3030);
         assert_eq!(cfg.electr_url, DEFAULT_ELECTR_URL);
@@ -324,6 +343,7 @@ server_port = 3030
             rollblock_user: None,
             rollblock_password: None,
             electr_url: None,
+            cors_enabled: None,
             server_host: None,
             server_port: None,
         };
@@ -335,6 +355,7 @@ server_port = 3030
         assert_eq!(cfg.rollblock_port, DEFAULT_ROLLBLOCK_PORT);
         assert_eq!(cfg.rollblock_user, DEFAULT_ROLLBLOCK_USER);
         assert_eq!(cfg.rollblock_password, DEFAULT_ROLLBLOCK_PASSWORD);
+        assert_eq!(cfg.cors_enabled, DEFAULT_CORS_ENABLED);
         assert_eq!(cfg.server_host, DEFAULT_SERVER_HOST);
         assert_eq!(cfg.server_port, DEFAULT_SERVER_PORT);
         assert_eq!(cfg.electr_url, "https://default.example/api");

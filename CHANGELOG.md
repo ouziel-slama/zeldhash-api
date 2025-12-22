@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] - 2025-12-22
+### Added
+- CORS support with permissive policy via `tower-http`.
+- New `cors_enabled` configuration option (CLI flag, config file, and `ZELDHASH_API_CORS_ENABLED` env var).
+- CORS is enabled by default.
+
 ## [0.2.0] - 2025-12-13
 ### Changed
 - Upgraded rollblock to 0.4.1 with typed `StoreKey` and `key-12` support.

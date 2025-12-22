@@ -43,6 +43,10 @@ pub struct Cli {
     #[arg(long, value_name = "URL")]
     pub electr_url: Option<String>,
 
+    /// Whether to enable CORS responses (default: enabled)
+    #[arg(long, value_name = "BOOL")]
+    pub cors_enabled: Option<bool>,
+
     /// Bind address for the HTTP server (default: 0.0.0.0)
     #[arg(long, value_name = "HOST")]
     pub server_host: Option<String>,
@@ -103,6 +107,10 @@ impl Cli {
             ))
         });
 
+        cmd = cmd.mut_arg("cors_enabled", |arg| {
+            arg.help("Whether to enable CORS responses (default: true)")
+        });
+
         cmd = cmd.mut_arg("server_host", |arg| {
             arg.help(format!(
                 "Bind address for the HTTP server (default: {DEFAULT_SERVER_HOST})"
@@ -153,7 +161,7 @@ mod tests {
     fn gather_parses_all_flags_from_env_overrides() {
         let tmp_dir = tempdir().unwrap();
         let args = format!(
-            "zeldhash-api --data-dir {} --rollblock-host example.com --rollblock-port 1234 --rollblock-user alice --rollblock-password secret --electr-url https://example.com/api --server-host 127.0.0.1 --server-port 4040",
+            "zeldhash-api --data-dir {} --rollblock-host example.com --rollblock-port 1234 --rollblock-user alice --rollblock-password secret --electr-url https://example.com/api --cors-enabled false --server-host 127.0.0.1 --server-port 4040",
             tmp_dir.path().display()
         );
         set_env("ZELDHASH_API_TEST_ARGS", &args);
@@ -166,6 +174,7 @@ mod tests {
         assert_eq!(cli.rollblock_user.as_deref(), Some("alice"));
         assert_eq!(cli.rollblock_password.as_deref(), Some("secret"));
         assert_eq!(cli.electr_url.as_deref(), Some("https://example.com/api"));
+        assert_eq!(cli.cors_enabled, Some(false));
         assert_eq!(cli.server_host.as_deref(), Some("127.0.0.1"));
         assert_eq!(cli.server_port, Some(4040));
 
@@ -182,6 +191,7 @@ mod tests {
         assert!(cli.rollblock_user.is_none());
         assert!(cli.rollblock_password.is_none());
         assert!(cli.electr_url.is_none());
+        assert!(cli.cors_enabled.is_none());
         assert!(cli.server_host.is_none());
         assert!(cli.server_port.is_none());
     }

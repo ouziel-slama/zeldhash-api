@@ -117,7 +117,7 @@ async fn bootstrap(
         electr_url: config.electr_url,
         http_client,
     };
-    let router = create_router(state.clone());
+    let router = create_router(state.clone(), config.cors_enabled);
 
     Ok(BootstrapOutput {
         state,
@@ -178,6 +178,7 @@ mod tests {
             rollblock_user: Some("zeld".into()),
             rollblock_password: Some("zeld".into()),
             electr_url: Some("https://example.test/api".into()),
+            cors_enabled: Some(true),
             server_host: Some("127.0.0.1".into()),
             server_port: Some(0),
         }

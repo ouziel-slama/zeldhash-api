@@ -8,6 +8,7 @@ pub const DEFAULT_ROLLBLOCK_HOST: &str = "localhost";
 pub const DEFAULT_ROLLBLOCK_PASSWORD: &str = "zeld";
 pub const DEFAULT_ROLLBLOCK_PORT: u16 = 9443;
 pub const DEFAULT_ROLLBLOCK_USER: &str = "zeld";
+pub const DEFAULT_CORS_ENABLED: bool = true;
 pub const DEFAULT_SERVER_HOST: &str = "0.0.0.0";
 pub const DEFAULT_SERVER_PORT: u16 = 3000;
 
