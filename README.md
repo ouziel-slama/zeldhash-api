@@ -5,7 +5,6 @@
 [![Format](https://github.com/ouziel-slama/zeldhash-api/actions/workflows/fmt.yml/badge.svg)](https://github.com/ouziel-slama/zeldhash-api/actions/workflows/fmt.yml)
 [![Clippy](https://github.com/ouziel-slama/zeldhash-api/actions/workflows/clippy.yml/badge.svg)](https://github.com/ouziel-slama/zeldhash-api/actions/workflows/clippy.yml)
 [![Crates.io](https://img.shields.io/crates/v/zeldhash-api.svg)](https://crates.io/crates/zeldhash-api)
-[![Docs.rs](https://docs.rs/zeldhash-api/badge.svg)](https://docs.rs/zeldhash-api)
 
 zeldhash-api is a REST API exposing [ZeldHash](https://zeldhash.com/) database over HTTP. It reads from the SQLite database produced by the zeldhash-parser collector and uses a rollblock server to fetch UTXO balances while also querying an Electrum-compatible API for address data.
 
