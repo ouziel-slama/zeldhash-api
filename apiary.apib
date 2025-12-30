@@ -119,6 +119,7 @@ Paginated list of rewards ordered by `block_index DESC`, then `reward DESC`, `ze
 + Parameters
     + offset: 0 (number, optional) - Row offset. Default: 0.
     + limit: 50 (number, optional) - Page size. Default: 50. Maximum: 500. Values above 500 are clamped to 500.
+    + sort: zero_count (string, optional) - Sorting mode. Supported: `zero_count` (orders by `zero_count DESC`, then `reward DESC`, `block_index DESC`, `txid ASC`, `vout ASC`). Default ordering matches the description above.
 
 #### GET
 + Request
@@ -174,6 +175,41 @@ Paginated list of rewards ordered by `block_index DESC`, then `reward DESC`, `ze
     + Body
 
             { "error": "`offset` exceeds 64-bit signed range." }
+
+### Rewards By Txid [/rewards/{txid}]
+List rewards for a specific transaction.
+
++ Parameters
+    + txid: 0000000089c1d40e77a9a601adfb263490ad717bc418ebed7f895d9eb41cdd84 (string) - Bitcoin transaction id.
+
+#### GET
++ Response 200 (application/json)
+    + Body
+
+            [
+              {
+                "block_index": 925112,
+                "reward": 409600000000,
+                "txid": "0000000089c1d40e77a9a601adfb263490ad717bc418ebed7f895d9eb41cdd84",
+                "vout": 0,
+                "zero_count": 8
+              }
+            ]
+
++ Response 400 (application/json)
+    + Body
+
+            { "error": "Malformed txid." }
+
++ Response 404 (application/json)
+    + Body
+
+            { "error": "Reward not found for txid." }
+
++ Response 500 (application/json)
+    + Body
+
+            { "error": "SQLite failure." }
 
 ## Group Address UTXOs
 

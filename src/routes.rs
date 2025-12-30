@@ -33,6 +33,10 @@ const ERR_BLOCK_HEIGHT_RANGE: &str = "`block_height` exceeds 64-bit signed range
 const ERR_OFFSET_RANGE: &str = "`offset` exceeds 64-bit signed range.";
 const ERR_SQLITE_FAILURE: &str = "SQLite failure.";
 const ERR_TOO_MANY_UTXOS_FOR_ADDRESS: &str = "More than 500 confirmed UTXOs for the address.";
+const ERR_REWARD_NOT_FOUND: &str = "Reward not found for txid.";
+const ERR_MALFORMED_TXID: &str = "Malformed txid.";
+const ERR_UNSUPPORTED_REWARD_SORT: &str =
+    "Unsupported sort. Use 'zero_count' or omit the parameter.";
 const ERR_ELECTRUM_FAILURE: &str = "Downstream Electrum API failure or invalid response.";
 const ERR_ROLLBLOCK_FAILURE: &str = "Rollblock failure.";
 const ERR_MALFORMED_OUTPOINT: &str = "Malformed txid or vout.";
@@ -51,6 +55,7 @@ pub fn create_router(state: AppState, enable_cors: bool) -> Router {
     let router = Router::new()
         .route("/", get(root))
         .route("/rewards", get(rewards))
+        .route("/rewards/{txid}", get(rewards_by_txid))
         .route("/blocks", get(blocks))
         .route("/blocks/{block_height}", get(block_details))
         .route("/addresses/{address}/utxos", get(address_utxos))
@@ -247,6 +252,7 @@ pub async fn block_details(
 pub struct RewardsQuery {
     offset: Option<usize>,
     limit: Option<usize>,
+    sort: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -276,15 +282,31 @@ pub async fn rewards(
         .unwrap_or(DEFAULT_REWARDS_LIMIT)
         .min(MAX_REWARDS_LIMIT) as i64;
 
+    let order_clause = match params.sort.as_deref() {
+        None | Some("") => {
+            "block_index DESC, reward DESC, zero_count DESC, txid ASC, vout ASC".to_string()
+        }
+        Some("zero_count") => {
+            "zero_count DESC, reward DESC, block_index DESC, txid ASC, vout ASC".to_string()
+        }
+        Some(other) => {
+            eprintln!("unsupported rewards sort: {other}");
+            return Err(json_error(
+                StatusCode::BAD_REQUEST,
+                ERR_UNSUPPORTED_REWARD_SORT,
+            ));
+        }
+    };
+
     let rewards = spawn_blocking(move || {
         let conn = pool.get().map_err(|err| format!("get connection: {err}"))?;
         let mut stmt = conn
-            .prepare(
+            .prepare(&format!(
                 "SELECT block_index, txid, vout, zero_count, reward \
                  FROM rewards \
-                 ORDER BY block_index DESC, reward DESC, zero_count DESC, txid ASC, vout ASC \
-                 LIMIT ?1 OFFSET ?2",
-            )
+                 ORDER BY {order_clause} \
+                 LIMIT ?1 OFFSET ?2"
+            ))
             .map_err(|err| format!("prepare rewards statement: {err}"))?;
 
         let mapped = stmt
@@ -314,6 +336,63 @@ pub async fn rewards(
         eprintln!("failed to fetch rewards: {err}");
         json_error(StatusCode::INTERNAL_SERVER_ERROR, ERR_SQLITE_FAILURE)
     })?;
+
+    Ok(Json(rewards))
+}
+
+pub async fn rewards_by_txid(
+    Path(txid_str): Path<String>,
+    State(state): State<AppState>,
+) -> ApiResult<impl IntoResponse> {
+    let txid = Txid::from_str(&txid_str).map_err(|err| {
+        eprintln!("invalid txid {txid_str}: {err}");
+        json_error(StatusCode::BAD_REQUEST, ERR_MALFORMED_TXID)
+    })?;
+    let txid = txid.to_string();
+
+    let pool = state.sqlite_pool.clone();
+    let rewards = spawn_blocking(move || {
+        let conn = pool.get().map_err(|err| format!("get connection: {err}"))?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT block_index, txid, vout, zero_count, reward \
+                 FROM rewards \
+                 WHERE txid = ?1 \
+                 ORDER BY block_index DESC, reward DESC, zero_count DESC, txid ASC, vout ASC",
+            )
+            .map_err(|err| format!("prepare rewards-by-txid statement: {err}"))?;
+
+        let mapped = stmt
+            .query_map([txid], |row| {
+                Ok(json!({
+                    "block_index": row.get::<_, i64>(0)?,
+                    "txid": row.get::<_, String>(1)?,
+                    "vout": row.get::<_, i64>(2)?,
+                    "zero_count": row.get::<_, i64>(3)?,
+                    "reward": row.get::<_, i64>(4)?,
+                }))
+            })
+            .map_err(|err| format!("query rewards-by-txid map: {err}"))?;
+
+        let rows = mapped
+            .collect::<Result<Vec<Value>, _>>()
+            .map_err(|err| format!("collect rewards-by-txid: {err}"))?;
+
+        Ok::<_, String>(rows)
+    })
+    .await
+    .map_err(|err| {
+        eprintln!("failed to join sqlite task: {err}");
+        json_error(StatusCode::INTERNAL_SERVER_ERROR, ERR_SQLITE_FAILURE)
+    })?
+    .map_err(|err| {
+        eprintln!("failed to fetch rewards by txid: {err}");
+        json_error(StatusCode::INTERNAL_SERVER_ERROR, ERR_SQLITE_FAILURE)
+    })?;
+
+    if rewards.is_empty() {
+        return Err(json_error(StatusCode::NOT_FOUND, ERR_REWARD_NOT_FOUND));
+    }
 
     Ok(Json(rewards))
 }
@@ -800,6 +879,7 @@ mod tests {
         let query = RewardsQuery {
             offset: Some(1),
             limit: Some(MAX_REWARDS_LIMIT + 10),
+            sort: None,
         };
 
         let list = response_json(
@@ -821,6 +901,7 @@ mod tests {
         let query = RewardsQuery {
             offset: Some(usize::MAX),
             limit: None,
+            sort: None,
         };
 
         let result = rewards(State(state), Query(query)).await;
@@ -829,6 +910,113 @@ mod tests {
         };
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert_eq!(body["error"], ERR_OFFSET_RANGE);
+    }
+
+    #[tokio::test]
+    async fn rewards_supports_zero_count_sort() {
+        let (pool, _tmp) = build_sqlite_pool_with_data(
+            vec![(1, "{}", "{}")],
+            vec![
+                (1, "tx1", 0, 3, 50),
+                (2, "tx2", 0, 5, 40),
+                (3, "tx3", 0, 5, 30),
+                (4, "tx4", 0, 1, 100),
+            ],
+        );
+        let rollblock = mock_rollblock_pool_with_responses(vec![]);
+        let state = sample_state(pool, rollblock, "http://localhost".into());
+        let query = RewardsQuery {
+            offset: None,
+            limit: None,
+            sort: Some("zero_count".into()),
+        };
+
+        let list = response_json(
+            rewards(State(state), Query(query))
+                .await
+                .expect("rewards ok"),
+        )
+        .await;
+        let arr = list.as_array().unwrap();
+        assert_eq!(arr[0]["txid"], "tx2");
+        assert_eq!(arr[1]["txid"], "tx3");
+        assert_eq!(arr[2]["txid"], "tx1");
+        assert_eq!(arr[3]["txid"], "tx4");
+    }
+
+    #[tokio::test]
+    async fn rewards_rejects_invalid_sort() {
+        let (pool, _tmp) = build_sqlite_pool_with_data(vec![(1, "{}", "{}")], vec![]);
+        let rollblock = mock_rollblock_pool_with_responses(vec![]);
+        let state = sample_state(pool, rollblock, "http://localhost".into());
+        let query = RewardsQuery {
+            offset: None,
+            limit: None,
+            sort: Some("bad".into()),
+        };
+
+        let result = rewards(State(state), Query(query)).await;
+        let Err((status, Json(body))) = result else {
+            panic!("expected rewards invalid sort error");
+        };
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["error"], ERR_UNSUPPORTED_REWARD_SORT);
+    }
+
+    #[tokio::test]
+    async fn rewards_by_txid_returns_rows() {
+        let (txid_str, _txid) = sample_txid(1);
+        let other_txid = sample_txid(2).0;
+        let (pool, _tmp) = build_sqlite_pool_with_data(
+            vec![(1, "{}", "{}")],
+            vec![
+                (7, &txid_str, 0, 3, 100),
+                (6, &txid_str, 1, 2, 50),
+                (5, &other_txid, 0, 1, 25),
+            ],
+        );
+        let rollblock = mock_rollblock_pool_with_responses(vec![]);
+        let state = sample_state(pool, rollblock, "http://localhost".into());
+
+        let response = response_json(
+            rewards_by_txid(Path(txid_str.clone()), State(state))
+                .await
+                .expect("rewards by txid ok"),
+        )
+        .await;
+        let arr = response.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        assert_eq!(arr[0]["block_index"], 7);
+        assert_eq!(arr[1]["vout"], 1);
+    }
+
+    #[tokio::test]
+    async fn rewards_by_txid_returns_not_found() {
+        let (pool, _tmp) = build_sqlite_pool_with_data(vec![(1, "{}", "{}")], vec![]);
+        let rollblock = mock_rollblock_pool_with_responses(vec![]);
+        let state = sample_state(pool, rollblock, "http://localhost".into());
+        let (txid_str, _txid) = sample_txid(3);
+
+        let result = rewards_by_txid(Path(txid_str), State(state)).await;
+        let Err((status, Json(body))) = result else {
+            panic!("expected rewards by txid not found");
+        };
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(body["error"], ERR_REWARD_NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn rewards_by_txid_rejects_invalid_txid() {
+        let (pool, _tmp) = build_sqlite_pool_with_data(vec![(1, "{}", "{}")], vec![]);
+        let rollblock = mock_rollblock_pool_with_responses(vec![]);
+        let state = sample_state(pool, rollblock, "http://localhost".into());
+
+        let result = rewards_by_txid(Path("not-a-txid".into()), State(state)).await;
+        let Err((status, Json(body))) = result else {
+            panic!("expected malformed txid error");
+        };
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["error"], ERR_MALFORMED_TXID);
     }
 
     #[tokio::test]

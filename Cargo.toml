@@ -1,6 +1,6 @@
 [package]
 name = "zeldhash-api"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 description = "REST API exposing ZeldHash database over HTTP"
 authors = ["Ouziel Slama"]

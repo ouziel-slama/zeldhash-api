@@ -50,7 +50,8 @@ All options can be set via CLI flags, environment variables, or a config file pa
 - `GET /` — Health check; verifies the SQLite pool is available.
 - `GET /blocks` — Latest cumulative statistics from the `stats` table.
 - `GET /blocks/:block_height` — Block-level stats plus rewards for the given height.
-- `GET /rewards?offset=&limit=` — Paginated list of rewards sorted by reward and block height.
+- `GET /rewards?offset=&limit=&sort=` — Paginated rewards list (default order: newest blocks, then reward, then zero count). Pass `sort=zero_count` to surface the highest `zero_count` first.
+- `GET /rewards/:txid` — Rewards for a specific transaction id.
 - `GET /addresses/:address/utxos` — Returns confirmed UTXOs for an address with rollblock balances.
 - `GET /utxos/:txid:vout` — Balance for a single outpoint.
 - `POST /utxos` — Batch balances for up to 100 outpoints.

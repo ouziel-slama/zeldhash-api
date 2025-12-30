@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.2] - 2025-12-30
+### Added
+- New `GET /rewards/{txid}` endpoint to fetch rewards for a specific transaction.
+- New `sort` query parameter for `/rewards` endpoint with `zero_count` option to order results by leading zeros first.
+
 ## [0.2.1] - 2025-12-22
 ### Added
 - CORS support with permissive policy via `tower-http`.
