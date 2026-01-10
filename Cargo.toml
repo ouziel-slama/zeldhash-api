@@ -1,12 +1,12 @@
 [package]
 name = "zeldhash-api"
-version = "0.2.2"
+version = "0.3.0"
 edition = "2021"
 description = "REST API exposing ZeldHash database over HTTP"
 authors = ["Ouziel Slama"]
 license = "Apache-2.0 OR MIT"
 repository = "https://github.com/ouziel-slama/zeldhash-api"
-homepage = "https://github.com/ouziel-slama/zeldhash-api"
+homepage = "https://zeldhash.com"
 readme = "README.md"
 keywords = ["bitcoin", "api", "sqlite", "axum", "rest"]
 categories = ["web-programming::http-server", "database"]
@@ -26,7 +26,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1", features = ["full"] }
 bitcoin = "0.32"
-zeldhash-protocol = "0.3.1"
+zeldhash-protocol = "0.5.0"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 [dev-dependencies]

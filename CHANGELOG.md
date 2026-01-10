@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-01-10
+### Changed
+- Upgraded `zeldhash-protocol` dependency from 0.3.1 to 0.5.0.
+
 ## [0.2.2] - 2025-12-30
 ### Added
 - New `GET /rewards/{txid}` endpoint to fetch rewards for a specific transaction.

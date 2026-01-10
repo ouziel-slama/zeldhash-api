@@ -2834,7 +2834,7 @@ dependencies = [
 
 [[package]]
 name = "zeldhash-api"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "axum",
  "bitcoin",
@@ -2856,9 +2856,9 @@ dependencies = [
 
 [[package]]
 name = "zeldhash-protocol"
-version = "0.3.1"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c556ab5d7e99706b6d6d7a6952bab6adae9e78df3a0fa92aa7ffe3754d76e7f7"
+checksum = "f34917a9e241aeee2f8312a6eb4dde82ff13ffc9c2fe479a63310800da481287"
 dependencies = [
  "bitcoin",
  "ciborium",
