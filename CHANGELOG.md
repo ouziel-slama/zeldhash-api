@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.1] - 2026-01-11
+### Fixed
+- Rewards from the same block are now returned in insertion order (most recent first) by adding `rowid DESC` to all reward queries.
+
 ## [0.3.0] - 2026-01-10
 ### Changed
 - Upgraded `zeldhash-protocol` dependency from 0.3.1 to 0.5.0.

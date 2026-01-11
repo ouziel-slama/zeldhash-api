@@ -185,7 +185,7 @@ pub async fn block_details(
                 "SELECT txid, vout, zero_count, reward \
                  FROM rewards \
                  WHERE block_index = ?1 \
-                 ORDER BY reward DESC, zero_count DESC, txid ASC, vout ASC",
+                 ORDER BY rowid DESC, reward DESC, zero_count DESC, txid ASC, vout ASC",
             )
             .map_err(|err| format!("prepare rewards statement: {err}"))?;
 
@@ -284,10 +284,12 @@ pub async fn rewards(
 
     let order_clause = match params.sort.as_deref() {
         None | Some("") => {
-            "block_index DESC, reward DESC, zero_count DESC, txid ASC, vout ASC".to_string()
+            "block_index DESC, rowid DESC, reward DESC, zero_count DESC, txid ASC, vout ASC"
+                .to_string()
         }
         Some("zero_count") => {
-            "zero_count DESC, reward DESC, block_index DESC, txid ASC, vout ASC".to_string()
+            "zero_count DESC, reward DESC, block_index DESC, rowid DESC, txid ASC, vout ASC"
+                .to_string()
         }
         Some(other) => {
             eprintln!("unsupported rewards sort: {other}");
@@ -358,7 +360,7 @@ pub async fn rewards_by_txid(
                 "SELECT block_index, txid, vout, zero_count, reward \
                  FROM rewards \
                  WHERE txid = ?1 \
-                 ORDER BY block_index DESC, reward DESC, zero_count DESC, txid ASC, vout ASC",
+                 ORDER BY block_index DESC, rowid DESC, reward DESC, zero_count DESC, vout ASC",
             )
             .map_err(|err| format!("prepare rewards-by-txid statement: {err}"))?;
 
