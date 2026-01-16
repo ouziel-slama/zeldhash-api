@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.3] - 2026-01-17
+### Changed
+- UTXO balance decoding now treats negative values as zero to handle spent UTXO tombstones introduced in `zeldhash-protocol` v0.6.0.
+
 ## [0.3.2] - 2026-01-16
 ### Added
 - New `GET /addresses/{address}/rewards` endpoint to fetch paginated rewards for a specific address, with optional `sort=zero_count` parameter.

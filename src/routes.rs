@@ -686,13 +686,19 @@ async fn fetch_rollblock_balances(
         .collect()
 }
 
+/// Decodes a rollblock balance value.
+///
+/// Since zeldhash-protocol v0.6.0, spent UTXOs are retained as negative tombstones.
+/// This function treats negative balances as zero (spent UTXO).
 fn decode_balance(value: Vec<u8>) -> ApiResult<u64> {
     match value.len() {
         0 => Ok(0u64),
         8 => {
             let mut buf = [0u8; 8];
             buf.copy_from_slice(&value);
-            Ok(u64::from_le_bytes(buf))
+            let signed = i64::from_le_bytes(buf);
+            // Negative balance indicates a spent UTXO (tombstone); treat as zero.
+            Ok(signed.max(0) as u64)
         }
         other => {
             eprintln!("invalid value length from rollblock: {other}");
@@ -1320,6 +1326,16 @@ mod tests {
         };
         assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
         assert_eq!(body["error"], ERR_ROLLBLOCK_FAILURE);
+    }
+
+    #[test]
+    fn decode_balance_treats_negative_as_zero() {
+        // Negative balance (spent UTXO tombstone) should be treated as zero.
+        assert_eq!(decode_balance((-1i64).to_le_bytes().to_vec()).unwrap(), 0);
+        assert_eq!(decode_balance((-100i64).to_le_bytes().to_vec()).unwrap(), 0);
+        assert_eq!(decode_balance(i64::MIN.to_le_bytes().to_vec()).unwrap(), 0);
+        // Positive values should pass through unchanged.
+        assert_eq!(decode_balance(100i64.to_le_bytes().to_vec()).unwrap(), 100);
     }
 
     #[test]
