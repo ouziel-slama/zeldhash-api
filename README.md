@@ -52,6 +52,7 @@ All options can be set via CLI flags, environment variables, or a config file pa
 - `GET /blocks/:block_height` — Block-level stats plus rewards for the given height.
 - `GET /rewards?offset=&limit=&sort=` — Paginated rewards list (default order: newest blocks, then reward, then zero count). Pass `sort=zero_count` to surface the highest `zero_count` first.
 - `GET /rewards/:txid` — Rewards for a specific transaction id.
+- `GET /addresses/:address/rewards?offset=&limit=&sort=` — Paginated rewards for a specific address.
 - `GET /addresses/:address/utxos` — Returns confirmed UTXOs for an address with rollblock balances.
 - `GET /utxos/:txid:vout` — Balance for a single outpoint.
 - `POST /utxos` — Batch balances for up to 100 outpoints.
@@ -61,6 +62,7 @@ Example:
 ```bash
 curl http://localhost:3000/blocks/840000 | jq
 curl "http://localhost:3000/rewards?limit=10&offset=0" | jq
+curl "http://localhost:3000/addresses/1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa/rewards" | jq
 curl -X POST http://localhost:3000/utxos \
   -H "Content-Type: application/json" \
   -d '{"utxos":["<txid>:0","<txid2>:1"]}'

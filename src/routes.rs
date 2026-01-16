@@ -34,6 +34,7 @@ const ERR_OFFSET_RANGE: &str = "`offset` exceeds 64-bit signed range.";
 const ERR_SQLITE_FAILURE: &str = "SQLite failure.";
 const ERR_TOO_MANY_UTXOS_FOR_ADDRESS: &str = "More than 500 confirmed UTXOs for the address.";
 const ERR_REWARD_NOT_FOUND: &str = "Reward not found for txid.";
+const ERR_REWARD_NOT_FOUND_FOR_ADDRESS: &str = "No rewards found for address.";
 const ERR_MALFORMED_TXID: &str = "Malformed txid.";
 const ERR_UNSUPPORTED_REWARD_SORT: &str =
     "Unsupported sort. Use 'zero_count' or omit the parameter.";
@@ -59,6 +60,7 @@ pub fn create_router(state: AppState, enable_cors: bool) -> Router {
         .route("/blocks", get(blocks))
         .route("/blocks/{block_height}", get(block_details))
         .route("/addresses/{address}/utxos", get(address_utxos))
+        .route("/addresses/{address}/rewards", get(rewards_by_address))
         .route("/utxos", post(utxo_balances))
         .route("/utxos/{outpoint}", get(utxo_balance))
         .with_state(state);
@@ -182,7 +184,7 @@ pub async fn block_details(
 
         let mut rewards_stmt = conn
             .prepare(
-                "SELECT txid, vout, zero_count, reward \
+                "SELECT txid, vout, zero_count, reward, address \
                  FROM rewards \
                  WHERE block_index = ?1 \
                  ORDER BY rowid DESC, reward DESC, zero_count DESC, txid ASC, vout ASC",
@@ -196,6 +198,7 @@ pub async fn block_details(
                     "vout": row.get::<_, i64>(1)?,
                     "zero_count": row.get::<_, i64>(2)?,
                     "reward": row.get::<_, i64>(3)?,
+                    "address": row.get::<_, Option<String>>(4)?,
                 }))
             })
             .map_err(|err| format!("query rewards map: {err}"))?
@@ -304,7 +307,7 @@ pub async fn rewards(
         let conn = pool.get().map_err(|err| format!("get connection: {err}"))?;
         let mut stmt = conn
             .prepare(&format!(
-                "SELECT block_index, txid, vout, zero_count, reward \
+                "SELECT block_index, txid, vout, zero_count, reward, address \
                  FROM rewards \
                  ORDER BY {order_clause} \
                  LIMIT ?1 OFFSET ?2"
@@ -319,6 +322,7 @@ pub async fn rewards(
                     "vout": row.get::<_, i64>(2)?,
                     "zero_count": row.get::<_, i64>(3)?,
                     "reward": row.get::<_, i64>(4)?,
+                    "address": row.get::<_, Option<String>>(5)?,
                 }))
             })
             .map_err(|err| format!("query rewards map: {err}"))?;
@@ -357,7 +361,7 @@ pub async fn rewards_by_txid(
         let conn = pool.get().map_err(|err| format!("get connection: {err}"))?;
         let mut stmt = conn
             .prepare(
-                "SELECT block_index, txid, vout, zero_count, reward \
+                "SELECT block_index, txid, vout, zero_count, reward, address \
                  FROM rewards \
                  WHERE txid = ?1 \
                  ORDER BY block_index DESC, rowid DESC, reward DESC, zero_count DESC, vout ASC",
@@ -372,6 +376,7 @@ pub async fn rewards_by_txid(
                     "vout": row.get::<_, i64>(2)?,
                     "zero_count": row.get::<_, i64>(3)?,
                     "reward": row.get::<_, i64>(4)?,
+                    "address": row.get::<_, Option<String>>(5)?,
                 }))
             })
             .map_err(|err| format!("query rewards-by-txid map: {err}"))?;
@@ -394,6 +399,91 @@ pub async fn rewards_by_txid(
 
     if rewards.is_empty() {
         return Err(json_error(StatusCode::NOT_FOUND, ERR_REWARD_NOT_FOUND));
+    }
+
+    Ok(Json(rewards))
+}
+
+pub async fn rewards_by_address(
+    Path(address): Path<String>,
+    State(state): State<AppState>,
+    Query(params): Query<RewardsQuery>,
+) -> ApiResult<impl IntoResponse> {
+    let pool = state.sqlite_pool.clone();
+    let offset_usize = params.offset.unwrap_or(0);
+    let offset = i64::try_from(offset_usize).map_err(|_| {
+        eprintln!("offset {offset_usize} exceeds i64 range");
+        json_error(StatusCode::BAD_REQUEST, ERR_OFFSET_RANGE)
+    })?;
+    let limit = params
+        .limit
+        .unwrap_or(DEFAULT_REWARDS_LIMIT)
+        .min(MAX_REWARDS_LIMIT) as i64;
+
+    let order_clause = match params.sort.as_deref() {
+        None | Some("") => {
+            "block_index DESC, rowid DESC, reward DESC, zero_count DESC, txid ASC, vout ASC"
+                .to_string()
+        }
+        Some("zero_count") => {
+            "zero_count DESC, reward DESC, block_index DESC, rowid DESC, txid ASC, vout ASC"
+                .to_string()
+        }
+        Some(other) => {
+            eprintln!("unsupported rewards sort: {other}");
+            return Err(json_error(
+                StatusCode::BAD_REQUEST,
+                ERR_UNSUPPORTED_REWARD_SORT,
+            ));
+        }
+    };
+
+    let rewards = spawn_blocking(move || {
+        let conn = pool.get().map_err(|err| format!("get connection: {err}"))?;
+        let mut stmt = conn
+            .prepare(&format!(
+                "SELECT block_index, txid, vout, zero_count, reward, address \
+                 FROM rewards \
+                 WHERE address = ?1 \
+                 ORDER BY {order_clause} \
+                 LIMIT ?2 OFFSET ?3"
+            ))
+            .map_err(|err| format!("prepare rewards-by-address statement: {err}"))?;
+
+        let mapped = stmt
+            .query_map(rusqlite::params![address, limit, offset], |row| {
+                Ok(json!({
+                    "block_index": row.get::<_, i64>(0)?,
+                    "txid": row.get::<_, String>(1)?,
+                    "vout": row.get::<_, i64>(2)?,
+                    "zero_count": row.get::<_, i64>(3)?,
+                    "reward": row.get::<_, i64>(4)?,
+                    "address": row.get::<_, Option<String>>(5)?,
+                }))
+            })
+            .map_err(|err| format!("query rewards-by-address map: {err}"))?;
+
+        let rows = mapped
+            .collect::<Result<Vec<Value>, _>>()
+            .map_err(|err| format!("collect rewards-by-address: {err}"))?;
+
+        Ok::<_, String>(rows)
+    })
+    .await
+    .map_err(|err| {
+        eprintln!("failed to join sqlite task: {err}");
+        json_error(StatusCode::INTERNAL_SERVER_ERROR, ERR_SQLITE_FAILURE)
+    })?
+    .map_err(|err| {
+        eprintln!("failed to fetch rewards by address: {err}");
+        json_error(StatusCode::INTERNAL_SERVER_ERROR, ERR_SQLITE_FAILURE)
+    })?;
+
+    if rewards.is_empty() {
+        return Err(json_error(
+            StatusCode::NOT_FOUND,
+            ERR_REWARD_NOT_FOUND_FOR_ADDRESS,
+        ));
     }
 
     Ok(Json(rewards))
@@ -638,9 +728,12 @@ mod tests {
     use tokio::net::TcpListener;
     use tokio::sync::oneshot;
 
+    /// (block_index, txid, vout, zero_count, reward, address)
+    type RewardRow<'a> = (i64, &'a str, i64, i64, i64, Option<&'a str>);
+
     fn build_sqlite_pool_with_data(
         stats_rows: Vec<(i64, &str, &str)>,
-        rewards_rows: Vec<(i64, &str, i64, i64, i64)>,
+        rewards_rows: Vec<RewardRow<'_>>,
     ) -> (SqlitePool, tempfile::TempDir) {
         let tmp = tempdir().expect("temp dir");
         let db_path = tmp.path().join("test.sqlite");
@@ -652,7 +745,7 @@ mod tests {
         )
         .expect("create stats table");
         conn.execute(
-            "CREATE TABLE rewards (block_index INTEGER, txid TEXT, vout INTEGER, zero_count INTEGER, reward INTEGER)",
+            "CREATE TABLE rewards (block_index INTEGER, txid TEXT, vout INTEGER, zero_count INTEGER, reward INTEGER, address TEXT)",
             [],
         )
         .expect("create rewards table");
@@ -665,10 +758,10 @@ mod tests {
             .expect("insert stats row");
         }
 
-        for (block_index, txid, vout, zero_count, reward) in rewards_rows {
+        for (block_index, txid, vout, zero_count, reward, address) in rewards_rows {
             conn.execute(
-                "INSERT INTO rewards (block_index, txid, vout, zero_count, reward) VALUES (?1, ?2, ?3, ?4, ?5)",
-                (block_index, txid, vout, zero_count, reward),
+                "INSERT INTO rewards (block_index, txid, vout, zero_count, reward, address) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                (block_index, txid, vout, zero_count, reward, address),
             )
             .expect("insert reward row");
         }
@@ -809,7 +902,10 @@ mod tests {
     async fn block_details_returns_stats_and_rewards() {
         let (pool, _tmp) = build_sqlite_pool_with_data(
             vec![(7, r#"{"block":7}"#, r#"{"agg":70}"#)],
-            vec![(7, "aaa", 0, 2, 50), (7, "bbb", 1, 3, 25)],
+            vec![
+                (7, "aaa", 0, 2, 50, Some("addr1")),
+                (7, "bbb", 1, 3, 25, Some("addr2")),
+            ],
         );
         let rollblock = mock_rollblock_pool_with_responses(vec![]);
         let state = sample_state(pool, rollblock, "http://localhost".into());
@@ -871,9 +967,9 @@ mod tests {
         let (pool, _tmp) = build_sqlite_pool_with_data(
             vec![(1, "{}", "{}")],
             vec![
-                (1, "tx1", 0, 1, 10),
-                (2, "tx2", 1, 1, 9),
-                (3, "tx3", 2, 1, 8),
+                (1, "tx1", 0, 1, 10, None),
+                (2, "tx2", 1, 1, 9, None),
+                (3, "tx3", 2, 1, 8, None),
             ],
         );
         let rollblock = mock_rollblock_pool_with_responses(vec![]);
@@ -919,10 +1015,10 @@ mod tests {
         let (pool, _tmp) = build_sqlite_pool_with_data(
             vec![(1, "{}", "{}")],
             vec![
-                (1, "tx1", 0, 3, 50),
-                (2, "tx2", 0, 5, 40),
-                (3, "tx3", 0, 5, 30),
-                (4, "tx4", 0, 1, 100),
+                (1, "tx1", 0, 3, 50, None),
+                (2, "tx2", 0, 5, 40, None),
+                (3, "tx3", 0, 5, 30, None),
+                (4, "tx4", 0, 1, 100, None),
             ],
         );
         let rollblock = mock_rollblock_pool_with_responses(vec![]);
@@ -972,9 +1068,9 @@ mod tests {
         let (pool, _tmp) = build_sqlite_pool_with_data(
             vec![(1, "{}", "{}")],
             vec![
-                (7, &txid_str, 0, 3, 100),
-                (6, &txid_str, 1, 2, 50),
-                (5, &other_txid, 0, 1, 25),
+                (7, &txid_str, 0, 3, 100, Some("addr1")),
+                (6, &txid_str, 1, 2, 50, Some("addr2")),
+                (5, &other_txid, 0, 1, 25, None),
             ],
         );
         let rollblock = mock_rollblock_pool_with_responses(vec![]);

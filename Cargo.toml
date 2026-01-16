@@ -1,6 +1,6 @@
 [package]
 name = "zeldhash-api"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 description = "REST API exposing ZeldHash database over HTTP"
 authors = ["Ouziel Slama"]
@@ -26,7 +26,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1", features = ["full"] }
 bitcoin = "0.32"
-zeldhash-protocol = "0.5.0"
+zeldhash-protocol = "0.6.0"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 [dev-dependencies]

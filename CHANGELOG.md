@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.2] - 2026-01-16
+### Added
+- New `GET /addresses/{address}/rewards` endpoint to fetch paginated rewards for a specific address, with optional `sort=zero_count` parameter.
+- Added `address` field to all reward responses (`/blocks/{height}`, `/rewards`, `/rewards/{txid}`).
+
+### Changed
+- Upgraded `zeldhash-protocol` dependency from 0.5.0 to 0.6.0.
+
 ## [0.3.1] - 2026-01-11
 ### Fixed
 - Rewards from the same block are now returned in insertion order (most recent first) by adding `rowid DESC` to all reward queries.
