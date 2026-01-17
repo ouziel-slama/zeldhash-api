@@ -62,6 +62,10 @@ pub fn create_router(state: AppState, enable_cors: bool) -> Router {
         .route("/blocks/{block_height}", get(block_details))
         .route("/addresses/{address}/utxos", get(address_utxos))
         .route("/addresses/{address}/rewards", get(rewards_by_address))
+        .route(
+            "/addresses/{address}/rewards/count",
+            get(rewards_count_by_address),
+        )
         .route("/utxos", post(utxo_balances))
         .route("/utxos/{outpoint}", get(utxo_balance))
         .with_state(state);
@@ -610,6 +614,66 @@ pub async fn rewards_by_address(
     }
 
     Ok(Json(rewards))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RewardsCountQuery {
+    #[serde(default)]
+    unconfirmed: bool,
+}
+
+pub async fn rewards_count_by_address(
+    Path(address): Path<String>,
+    State(state): State<AppState>,
+    Query(params): Query<RewardsCountQuery>,
+) -> ApiResult<impl IntoResponse> {
+    let pool = state.sqlite_pool.clone();
+    let address_clone = address.clone();
+
+    // Query confirmed count and total from SQLite
+    let (confirmed_count, total_confirmed) = spawn_blocking(move || {
+        let conn = pool.get().map_err(|err| format!("get connection: {err}"))?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT COUNT(*), COALESCE(SUM(reward), 0) \
+                 FROM rewards \
+                 WHERE address = ?1",
+            )
+            .map_err(|err| format!("prepare rewards-count statement: {err}"))?;
+
+        let result = stmt
+            .query_row([address_clone], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
+            })
+            .map_err(|err| format!("query rewards-count: {err}"))?;
+
+        Ok::<_, String>(result)
+    })
+    .await
+    .map_err(|err| {
+        eprintln!("failed to join sqlite task: {err}");
+        json_error(StatusCode::INTERNAL_SERVER_ERROR, ERR_SQLITE_FAILURE)
+    })?
+    .map_err(|err| {
+        eprintln!("failed to fetch rewards count: {err}");
+        json_error(StatusCode::INTERNAL_SERVER_ERROR, ERR_SQLITE_FAILURE)
+    })?;
+
+    // Fetch unconfirmed count if requested
+    let unconfirmed_count = if params.unconfirmed {
+        let base_url = state.electr_url.trim_end_matches('/');
+        let unconfirmed_rewards =
+            fetch_unconfirmed_rewards(&state.http_client, base_url, &address).await?;
+        unconfirmed_rewards.len() as i64
+    } else {
+        0
+    };
+
+    Ok(Json(json!({
+        "confirmed_count": confirmed_count,
+        "unconfirmed_count": unconfirmed_count,
+        "total_confirmed": total_confirmed,
+    })))
 }
 
 pub async fn address_utxos(
@@ -1474,5 +1538,53 @@ mod tests {
 
         assert_eq!(key1, key2);
         assert_ne!(key1, key3);
+    }
+
+    #[tokio::test]
+    async fn rewards_count_by_address_returns_counts() {
+        let (pool, _tmp) = build_sqlite_pool_with_data(
+            vec![(1, "{}", "{}")],
+            vec![
+                (1, "tx1", 0, 3, 100, Some("addr1")),
+                (2, "tx2", 0, 5, 200, Some("addr1")),
+                (3, "tx3", 0, 2, 50, Some("addr2")),
+            ],
+        );
+        let rollblock = mock_rollblock_pool_with_responses(vec![]);
+        let state = sample_state(pool, rollblock, "http://localhost".into());
+        let query = RewardsCountQuery { unconfirmed: false };
+
+        let body = response_json(
+            rewards_count_by_address(Path("addr1".into()), State(state), Query(query))
+                .await
+                .expect("rewards count ok"),
+        )
+        .await;
+
+        assert_eq!(body["confirmed_count"], 2);
+        assert_eq!(body["unconfirmed_count"], 0);
+        assert_eq!(body["total_confirmed"], 300);
+    }
+
+    #[tokio::test]
+    async fn rewards_count_by_address_returns_zero_for_unknown_address() {
+        let (pool, _tmp) = build_sqlite_pool_with_data(
+            vec![(1, "{}", "{}")],
+            vec![(1, "tx1", 0, 3, 100, Some("addr1"))],
+        );
+        let rollblock = mock_rollblock_pool_with_responses(vec![]);
+        let state = sample_state(pool, rollblock, "http://localhost".into());
+        let query = RewardsCountQuery { unconfirmed: false };
+
+        let body = response_json(
+            rewards_count_by_address(Path("unknown".into()), State(state), Query(query))
+                .await
+                .expect("rewards count ok"),
+        )
+        .await;
+
+        assert_eq!(body["confirmed_count"], 0);
+        assert_eq!(body["unconfirmed_count"], 0);
+        assert_eq!(body["total_confirmed"], 0);
     }
 }

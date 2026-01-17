@@ -272,6 +272,33 @@ Paginated list of rewards for a specific address.
 
             { "error": "SQLite failure." }
 
+### Rewards Count By Address [/addresses/{address}/rewards/count{?unconfirmed}]
+Returns the count of rewards and sum of confirmed rewards for a specific address.
+
++ Parameters
+    + address: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa (string) - Bitcoin address.
+    + unconfirmed: false (boolean, optional) - When `true`, also counts unconfirmed transactions from mempool.space that have a txid starting with at least 6 zeros and where the address is in the first non-OP_RETURN output. Default: `false`.
+
+#### GET
++ Response 200 (application/json)
+    + Body
+
+            {
+              "confirmed_count": 5,
+              "unconfirmed_count": 2,
+              "total_confirmed": 2048000000000
+            }
+
++ Response 502 (application/json)
+    + Body
+
+            { "error": "Downstream mempool API failure or invalid response." }
+
++ Response 500 (application/json)
+    + Body
+
+            { "error": "SQLite failure." }
+
 ## Group Address UTXOs
 
 ### Address UTXOs [/addresses/{address}/utxos]
