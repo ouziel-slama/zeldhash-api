@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.4] - 2026-01-17
+### Added
+- New `unconfirmed` query parameter for `/addresses/{address}/rewards` endpoint. When `true`, includes unconfirmed transactions from mempool.space where the txid starts with at least 6 zeros and the address is in the first non-OP_RETURN output.
+- Unconfirmed rewards appear first in results with `reward: "unknown"` and `block_index: null`.
+- New 502 error response for mempool.space API failures.
+
 ## [0.3.3] - 2026-01-17
 ### Changed
 - UTXO balance decoding now treats negative values as zero to handle spent UTXO tombstones introduced in `zeldhash-protocol` v0.6.0.

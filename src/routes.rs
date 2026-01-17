@@ -39,6 +39,7 @@ const ERR_MALFORMED_TXID: &str = "Malformed txid.";
 const ERR_UNSUPPORTED_REWARD_SORT: &str =
     "Unsupported sort. Use 'zero_count' or omit the parameter.";
 const ERR_ELECTRUM_FAILURE: &str = "Downstream Electrum API failure or invalid response.";
+const ERR_MEMPOOL_FAILURE: &str = "Downstream mempool API failure or invalid response.";
 const ERR_ROLLBLOCK_FAILURE: &str = "Rollblock failure.";
 const ERR_MALFORMED_OUTPOINT: &str = "Malformed txid or vout.";
 const ERR_TOO_MANY_OUTPOINTS: &str = "More than 100 outpoints or malformed entries.";
@@ -256,6 +257,8 @@ pub struct RewardsQuery {
     offset: Option<usize>,
     limit: Option<usize>,
     sort: Option<String>,
+    #[serde(default)]
+    unconfirmed: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -269,6 +272,22 @@ struct AddressUtxo {
 struct AddressUtxoStatus {
     confirmed: bool,
 }
+
+/// Transaction output from mempool.space API.
+#[derive(Debug, Deserialize)]
+struct MempoolTxVout {
+    scriptpubkey_type: Option<String>,
+    scriptpubkey_address: Option<String>,
+}
+
+/// Transaction from mempool.space API.
+#[derive(Debug, Deserialize)]
+struct MempoolTx {
+    txid: String,
+    vout: Vec<MempoolTxVout>,
+}
+
+const MIN_ZERO_COUNT: usize = 6;
 
 pub async fn rewards(
     State(state): State<AppState>,
@@ -404,21 +423,81 @@ pub async fn rewards_by_txid(
     Ok(Json(rewards))
 }
 
+/// Counts leading zeros in a hex txid string.
+fn count_leading_zeros(txid: &str) -> usize {
+    txid.chars().take_while(|c| *c == '0').count()
+}
+
+/// Fetches unconfirmed transactions from mempool.space and returns rewards
+/// for transactions where:
+/// - The txid starts with at least MIN_ZERO_COUNT zeros
+/// - The provided address is in the first non-OP_RETURN output
+async fn fetch_unconfirmed_rewards(
+    http_client: &reqwest::Client,
+    base_url: &str,
+    address: &str,
+) -> ApiResult<Vec<Value>> {
+    let url = format!("{base_url}/address/{address}/txs/mempool");
+    let txs: Vec<MempoolTx> = http_client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|err| {
+            eprintln!("failed to fetch mempool txs for {address}: {err}");
+            json_error(StatusCode::BAD_GATEWAY, ERR_MEMPOOL_FAILURE)
+        })?
+        .json()
+        .await
+        .map_err(|err| {
+            eprintln!("failed to decode mempool response for {address}: {err}");
+            json_error(StatusCode::BAD_GATEWAY, ERR_MEMPOOL_FAILURE)
+        })?;
+
+    let mut unconfirmed_rewards = Vec::new();
+
+    for tx in txs {
+        // Check if txid starts with at least MIN_ZERO_COUNT zeros
+        let zero_count = count_leading_zeros(&tx.txid);
+        if zero_count < MIN_ZERO_COUNT {
+            continue;
+        }
+
+        // Find the first non-OP_RETURN output
+        let first_non_op_return = tx
+            .vout
+            .iter()
+            .enumerate()
+            .find(|(_, vout)| vout.scriptpubkey_type.as_deref() != Some("op_return"));
+
+        // Check if the address is in the first non-OP_RETURN output
+        if let Some((vout_index, vout)) = first_non_op_return {
+            if vout.scriptpubkey_address.as_deref() == Some(address) {
+                unconfirmed_rewards.push(json!({
+                    "block_index": Value::Null,
+                    "txid": tx.txid,
+                    "vout": vout_index,
+                    "zero_count": zero_count,
+                    "reward": "unknown",
+                    "address": address,
+                }));
+            }
+        }
+    }
+
+    Ok(unconfirmed_rewards)
+}
+
 pub async fn rewards_by_address(
     Path(address): Path<String>,
     State(state): State<AppState>,
     Query(params): Query<RewardsQuery>,
 ) -> ApiResult<impl IntoResponse> {
     let pool = state.sqlite_pool.clone();
-    let offset_usize = params.offset.unwrap_or(0);
-    let offset = i64::try_from(offset_usize).map_err(|_| {
-        eprintln!("offset {offset_usize} exceeds i64 range");
-        json_error(StatusCode::BAD_REQUEST, ERR_OFFSET_RANGE)
-    })?;
+    let offset = params.offset.unwrap_or(0);
     let limit = params
         .limit
         .unwrap_or(DEFAULT_REWARDS_LIMIT)
-        .min(MAX_REWARDS_LIMIT) as i64;
+        .min(MAX_REWARDS_LIMIT);
 
     let order_clause = match params.sort.as_deref() {
         None | Some("") => {
@@ -438,46 +517,90 @@ pub async fn rewards_by_address(
         }
     };
 
-    let rewards = spawn_blocking(move || {
-        let conn = pool.get().map_err(|err| format!("get connection: {err}"))?;
-        let mut stmt = conn
-            .prepare(&format!(
-                "SELECT block_index, txid, vout, zero_count, reward, address \
-                 FROM rewards \
-                 WHERE address = ?1 \
-                 ORDER BY {order_clause} \
-                 LIMIT ?2 OFFSET ?3"
-            ))
-            .map_err(|err| format!("prepare rewards-by-address statement: {err}"))?;
+    // Fetch unconfirmed rewards if requested
+    let all_unconfirmed = if params.unconfirmed {
+        let base_url = state.electr_url.trim_end_matches('/');
+        fetch_unconfirmed_rewards(&state.http_client, base_url, &address).await?
+    } else {
+        Vec::new()
+    };
 
-        let mapped = stmt
-            .query_map(rusqlite::params![address, limit, offset], |row| {
-                Ok(json!({
-                    "block_index": row.get::<_, i64>(0)?,
-                    "txid": row.get::<_, String>(1)?,
-                    "vout": row.get::<_, i64>(2)?,
-                    "zero_count": row.get::<_, i64>(3)?,
-                    "reward": row.get::<_, i64>(4)?,
-                    "address": row.get::<_, Option<String>>(5)?,
-                }))
-            })
-            .map_err(|err| format!("query rewards-by-address map: {err}"))?;
+    let unconfirmed_count = all_unconfirmed.len();
 
-        let rows = mapped
-            .collect::<Result<Vec<Value>, _>>()
-            .map_err(|err| format!("collect rewards-by-address: {err}"))?;
+    // Calculate pagination for unified results:
+    // - Unconfirmed rewards come first (virtual positions 0..unconfirmed_count)
+    // - Confirmed rewards follow (virtual positions unconfirmed_count..)
+    let (unconfirmed_to_include, db_offset, db_limit) = if offset >= unconfirmed_count {
+        // Offset is past all unconfirmed, only fetch from DB
+        let db_offset = offset - unconfirmed_count;
+        (Vec::new(), db_offset, limit)
+    } else {
+        // Include some unconfirmed rewards
+        let unconfirmed_start = offset;
+        let unconfirmed_end = (offset + limit).min(unconfirmed_count);
+        let unconfirmed_slice = all_unconfirmed[unconfirmed_start..unconfirmed_end].to_vec();
+        let remaining_limit = limit.saturating_sub(unconfirmed_slice.len());
+        (unconfirmed_slice, 0, remaining_limit)
+    };
 
-        Ok::<_, String>(rows)
-    })
-    .await
-    .map_err(|err| {
-        eprintln!("failed to join sqlite task: {err}");
-        json_error(StatusCode::INTERNAL_SERVER_ERROR, ERR_SQLITE_FAILURE)
-    })?
-    .map_err(|err| {
-        eprintln!("failed to fetch rewards by address: {err}");
-        json_error(StatusCode::INTERNAL_SERVER_ERROR, ERR_SQLITE_FAILURE)
-    })?;
+    // Only query DB if we need confirmed rewards
+    let confirmed_rewards = if db_limit > 0 {
+        let db_offset_i64 = i64::try_from(db_offset).map_err(|_| {
+            eprintln!("db_offset {db_offset} exceeds i64 range");
+            json_error(StatusCode::BAD_REQUEST, ERR_OFFSET_RANGE)
+        })?;
+        let db_limit_i64 = db_limit as i64;
+
+        spawn_blocking(move || {
+            let conn = pool.get().map_err(|err| format!("get connection: {err}"))?;
+            let mut stmt = conn
+                .prepare(&format!(
+                    "SELECT block_index, txid, vout, zero_count, reward, address \
+                     FROM rewards \
+                     WHERE address = ?1 \
+                     ORDER BY {order_clause} \
+                     LIMIT ?2 OFFSET ?3"
+                ))
+                .map_err(|err| format!("prepare rewards-by-address statement: {err}"))?;
+
+            let mapped = stmt
+                .query_map(
+                    rusqlite::params![address, db_limit_i64, db_offset_i64],
+                    |row| {
+                        Ok(json!({
+                            "block_index": row.get::<_, i64>(0)?,
+                            "txid": row.get::<_, String>(1)?,
+                            "vout": row.get::<_, i64>(2)?,
+                            "zero_count": row.get::<_, i64>(3)?,
+                            "reward": row.get::<_, i64>(4)?,
+                            "address": row.get::<_, Option<String>>(5)?,
+                        }))
+                    },
+                )
+                .map_err(|err| format!("query rewards-by-address map: {err}"))?;
+
+            let rows = mapped
+                .collect::<Result<Vec<Value>, _>>()
+                .map_err(|err| format!("collect rewards-by-address: {err}"))?;
+
+            Ok::<_, String>(rows)
+        })
+        .await
+        .map_err(|err| {
+            eprintln!("failed to join sqlite task: {err}");
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, ERR_SQLITE_FAILURE)
+        })?
+        .map_err(|err| {
+            eprintln!("failed to fetch rewards by address: {err}");
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, ERR_SQLITE_FAILURE)
+        })?
+    } else {
+        Vec::new()
+    };
+
+    // Combine unconfirmed (first) and confirmed rewards
+    let mut rewards = unconfirmed_to_include;
+    rewards.extend(confirmed_rewards);
 
     if rewards.is_empty() {
         return Err(json_error(
@@ -984,6 +1107,7 @@ mod tests {
             offset: Some(1),
             limit: Some(MAX_REWARDS_LIMIT + 10),
             sort: None,
+            unconfirmed: false,
         };
 
         let list = response_json(
@@ -1006,6 +1130,7 @@ mod tests {
             offset: Some(usize::MAX),
             limit: None,
             sort: None,
+            unconfirmed: false,
         };
 
         let result = rewards(State(state), Query(query)).await;
@@ -1033,6 +1158,7 @@ mod tests {
             offset: None,
             limit: None,
             sort: Some("zero_count".into()),
+            unconfirmed: false,
         };
 
         let list = response_json(
@@ -1057,6 +1183,7 @@ mod tests {
             offset: None,
             limit: None,
             sort: Some("bad".into()),
+            unconfirmed: false,
         };
 
         let result = rewards(State(state), Query(query)).await;

@@ -218,7 +218,7 @@ List rewards for a specific transaction.
 
             { "error": "SQLite failure." }
 
-### Rewards By Address [/addresses/{address}/rewards{?offset,limit,sort}]
+### Rewards By Address [/addresses/{address}/rewards{?offset,limit,sort,unconfirmed}]
 Paginated list of rewards for a specific address.
 
 + Parameters
@@ -226,12 +226,22 @@ Paginated list of rewards for a specific address.
     + offset: 0 (number, optional) - Row offset. Default: 0.
     + limit: 50 (number, optional) - Page size. Default: 50. Maximum: 500. Values above 500 are clamped to 500.
     + sort: zero_count (string, optional) - Sorting mode. Supported: `zero_count` (orders by `zero_count DESC`, then `reward DESC`, `block_index DESC`, `txid ASC`, `vout ASC`). Default ordering is by `block_index DESC`.
+    + unconfirmed: false (boolean, optional) - When `true`, includes unconfirmed transactions from mempool.space that have a txid starting with at least 6 zeros and where the address is in the first non-OP_RETURN output. Unconfirmed rewards appear first in the results with `reward` set to `"unknown"` and `block_index` set to `null`. Default: `false`.
 
 #### GET
 + Response 200 (application/json)
+    + When `unconfirmed=true`, unconfirmed rewards appear first with `reward: "unknown"` and `block_index: null`.
     + Body
 
             [
+              {
+                "address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+                "block_index": null,
+                "reward": "unknown",
+                "txid": "000000abc123...",
+                "vout": 0,
+                "zero_count": 7
+              },
               {
                 "address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
                 "block_index": 925112,
@@ -251,6 +261,11 @@ Paginated list of rewards for a specific address.
     + Body
 
             { "error": "`offset` exceeds 64-bit signed range." }
+
++ Response 502 (application/json)
+    + Body
+
+            { "error": "Downstream mempool API failure or invalid response." }
 
 + Response 500 (application/json)
     + Body
